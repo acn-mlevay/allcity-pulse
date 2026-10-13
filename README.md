@@ -52,9 +52,9 @@ Still open: KCSN feeds and teams, a feed for PHNX Wildcats, and FAST channel MRS
    ```
    One market only: `/api/ingest?market=phly`.
 
-**Background refresh** is toggled in the sidebar (Daily / 30 min). It controls the scheduled full ingest (podcast catalogs, trends, WebSub renewals); the live page's real-time updates run regardless and defaults to Daily. Crons keep firing on the schedule below; in Daily mode each market runs one full refresh on the first tick at or after 10:00 UTC (6 AM ET in summer, 5 AM in winter) and every other tick is skipped. Manual `/api/ingest` calls always run. The setting is stored in Blob at `pulse/settings.json`. Vercel's Hobby plan only allows once-a-day crons; on Hobby, replace `vercel.json`'s crons with a single `{ "path": "/api/ingest", "schedule": "0 10 * * *" }` (the 30-min option then has no effect).
+**Scheduled refresh (works on Vercel Hobby).** One daily cron (10:00 UTC, about 6 AM ET) calls `/api/ingest?chain=0`. Each step refreshes one market in the background, then calls the next step, so every market gets its own function time limit. The sidebar toggle (Daily / 30 min) controls frequency: in 30 min mode, any visit to the app starts a new full refresh when the last one is over 30 minutes old. The live page's real-time updates (15-second polling, push notifications) run in either mode.
 
-`vercel.json` runs one cron per market every 30 minutes, staggered, so no single run has to pull all 78 feeds. A second cron refreshes only video, article, and FAST feeds every 10 minutes for the live feed. If a fast-lane run overlaps a full run on the same market, the last write wins; anything dropped comes back on the next run. Check your Vercel plan's cron count and frequency limits and loosen the schedules if needed. Ingest uses `maxDuration = 300`.
+On a Pro plan you can add more crons to `vercel.json` (e.g. `{ "path": "/api/ingest?chain=0", "schedule": "*/30 * * * *" }`).
 
 Simplecast feeds use the show homepage as every episode's link, so episodes link to `https://player.simplecast.com/<episode-id>` instead. Click-test a few after the first ingest.
 

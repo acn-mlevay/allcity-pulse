@@ -6,7 +6,7 @@ export const DAILY_HOUR_UTC = 10;
 
 export const REFRESH_LABEL: Record<RefreshMode, string> = {
   daily: "Daily, around 6 AM ET",
-  frequent: "Every 30 min (video and articles every 10)",
+  frequent: "Daily, plus every 30 min while the app is open",
 };
 
 /**

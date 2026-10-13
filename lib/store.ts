@@ -55,6 +55,8 @@ export const writeIndex = (index: MarketIndex) => writeJSON(`index-${index.marke
 export type RefreshMode = "daily" | "frequent";
 export interface Settings {
   refreshMode: RefreshMode;
+  /** When the last full-refresh chain started. */
+  chainStartedAt?: string;
 }
 export const DEFAULT_SETTINGS: Settings = { refreshMode: "daily" };
 

@@ -1,4 +1,6 @@
 import { Sidebar } from "@/components/Sidebar";
+import { after } from "next/server";
+import { maybeStartChain } from "@/lib/chain";
 import { getView } from "@/lib/data";
 import { ago } from "@/lib/format";
 import { TrendBlock } from "@/components/TrendBlock";
@@ -10,6 +12,7 @@ type Props = { searchParams: Promise<{ market?: string; q?: string }> };
 
 export default async function Page({ searchParams }: Props) {
   const { market: marketParam = "all", q = "" } = await searchParams;
+  after(() => maybeStartChain().catch(() => {}));
   const { market, views, results, updated, counts, totalItems } = await getView(marketParam, q.trim());
 
   const withMatches = views.filter((v) => v.matches.length);
