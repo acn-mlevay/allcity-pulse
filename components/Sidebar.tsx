@@ -16,7 +16,7 @@ export async function Sidebar({
   counts?: Record<string, number | undefined>;
   note?: React.ReactNode;
 }) {
-  const { refreshMode } = await readSettings();
+  const { refreshMode, chainStartedAt } = await readSettings();
   const base = page === "live" ? "/live" : "/";
   const nav = [{ slug: "all", name: "All markets" }, ...MARKETS];
   const href = (slug: string) => (slug === "all" ? base : `${base}?market=${slug}`);
@@ -44,7 +44,7 @@ export async function Sidebar({
         </ul>
       </nav>
       {note && <p className="side-note">{note}</p>}
-      <RefreshToggle mode={refreshMode} />
+      <RefreshToggle mode={refreshMode} startedAt={chainStartedAt} />
     </aside>
   );
 }
