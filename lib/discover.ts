@@ -47,3 +47,13 @@ export function discoveredFeeds(d?: Discovered): FeedConfig[] {
   if (d.youtube) feeds.push({ url: d.youtube, type: "video" });
   return feeds;
 }
+
+/**
+ * A market's feeds: configured ones plus discovered ones for content types the
+ * market doesn't configure itself. Optionally limited to some types.
+ */
+export function feedsFor(market: Market, discovered?: Discovered, types?: FeedConfig["type"][]): FeedConfig[] {
+  const configuredTypes = new Set(market.feeds.map((f) => f.type));
+  const feeds = [...market.feeds, ...discoveredFeeds(discovered).filter((f) => !configuredTypes.has(f.type))];
+  return types ? feeds.filter((f) => types.includes(f.type)) : feeds;
+}

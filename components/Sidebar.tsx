@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { MARKETS } from "@/config/markets";
+import { readSettings } from "@/lib/store";
+import { RefreshToggle } from "./RefreshToggle";
 
 type Page = "trending" | "live";
 
-export function Sidebar({
+export async function Sidebar({
   page,
   market,
   counts = {},
@@ -14,6 +16,7 @@ export function Sidebar({
   counts?: Record<string, number | undefined>;
   note?: React.ReactNode;
 }) {
+  const { refreshMode } = await readSettings();
   const base = page === "live" ? "/live" : "/";
   const nav = [{ slug: "all", name: "All markets" }, ...MARKETS];
   const href = (slug: string) => (slug === "all" ? base : `${base}?market=${slug}`);
@@ -41,6 +44,7 @@ export function Sidebar({
         </ul>
       </nav>
       {note && <p className="side-note">{note}</p>}
+      <RefreshToggle mode={refreshMode} />
     </aside>
   );
 }

@@ -44,6 +44,12 @@ export interface ContentItem {
   link: string;
   date: string | null;
   thumbnail?: string;
+  /** Playable audio URL (podcast enclosure). */
+  audio?: string;
+  /** YouTube video id, for the embedded player. */
+  videoId?: string;
+  /** YouTube live state when known. */
+  live?: "live" | "upcoming";
   /** Reserved for the transcript phase. Searched when present. */
   transcript?: string;
 }
@@ -74,10 +80,14 @@ export interface Trend {
 export interface MarketIndex {
   market: string;
   updatedAt: string;
+  /** Last full (not fast-lane) ingest. */
+  fullAt?: string;
   items: ContentItem[];
   trends: Trend[];
   feedErrors: { url: string; error: string }[];
   discovered?: Discovered;
+  /** WebSub hubs advertised by this market's feeds, keyed by feed URL. */
+  hubs?: Record<string, { hub: string; topic: string; subscribedAt?: string }>;
   /** YouTube API backfill progress, keyed by feed URL. */
   youtubeBackfill?: Record<string, YouTubeBackfill>;
 }
@@ -94,4 +104,20 @@ export interface Match {
   item: ContentItem;
   score: number;
   hits: string[];
+}
+
+/** Recent items pushed by WebSub or pulled by the live-page refresh. */
+export interface LiveStore {
+  refreshedAt: string | null;
+  items: ContentItem[];
+  /** Copied from each market's index so the live refresh needn't read indexes. */
+  discovered?: Record<string, Discovered>;
+}
+
+export interface StreamConfig {
+  name: string;
+  market: string;
+  kind: "audio" | "video";
+  /** HLS (.m3u8) or a direct audio stream URL. */
+  url: string;
 }

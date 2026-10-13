@@ -72,6 +72,7 @@ export async function backfillChannel(
         title,
         description: desc.length > DESCRIPTION_LIMIT ? desc.slice(0, DESCRIPTION_LIMIT) + "..." : desc,
         link: `https://www.youtube.com/watch?v=${videoId}`,
+        videoId,
         date: v.contentDetails?.videoPublishedAt || v.snippet?.publishedAt || null,
         thumbnail: v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url,
       });
@@ -90,4 +91,19 @@ export async function backfillChannel(
       at: new Date().toISOString(),
     },
   };
+}
+
+/**
+ * Live/upcoming state for up to 50 recent videos (1 quota unit per call).
+ * Returns an empty map without an API key.
+ */
+export async function liveStates(videoIds: string[]): Promise<Record<string, "live" | "upcoming" | undefined>> {
+  if (!youtubeApiEnabled() || !videoIds.length) return {};
+  const res = await api("videos", { part: "snippet", id: videoIds.slice(0, 50).join(",") });
+  const out: Record<string, "live" | "upcoming" | undefined> = {};
+  for (const v of res.items || []) {
+    const s = v.snippet?.liveBroadcastContent;
+    out[v.id] = s === "live" || s === "upcoming" ? s : undefined;
+  }
+  return out;
 }

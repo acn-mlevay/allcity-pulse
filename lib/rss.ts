@@ -13,6 +13,7 @@ const parser: Parser<AnyItem, AnyItem> = new Parser({
       ["itunes:image", "itunesImage"],
       ["media:thumbnail", "mediaThumbnail"],
       ["media:content", "mediaContent", { keepArray: true }],
+      ["yt:videoId", "ytVideoId"],
     ],
   },
 });
@@ -86,6 +87,12 @@ function pickThumbnail(item: AnyItem): string | undefined {
   );
 }
 
+function youTubeId(item: AnyItem): string | undefined {
+  const id = item.ytVideoId || String(item.id || "").match(/^yt:video:([\w-]{11})$/)?.[1];
+  if (id) return id;
+  return String(item.link || "").match(/youtube\.com\/watch\?v=([\w-]{11})/)?.[1];
+}
+
 function pickDate(item: AnyItem): string | null {
   const raw = item.isoDate || item.pubDate || item.published;
   if (!raw) return null;
@@ -93,9 +100,37 @@ function pickDate(item: AnyItem): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+export interface FeedResult {
+  items: ContentItem[];
+  /** WebSub hub and topic, when the feed advertises them. */
+  hub?: { hub: string; topic: string };
+}
+
 export async function fetchFeed(feed: FeedConfig, market: string): Promise<ContentItem[]> {
+  return (await fetchFeedWithMeta(feed, market)).items;
+}
+
+export async function fetchFeedWithMeta(feed: FeedConfig, market: string): Promise<FeedResult> {
   const url = feed.url.startsWith("youtube:") ? await youtubeFeedUrl(feed.url.slice(8)) : feed.url;
   const xml = await fetchText(url);
+  const items = await parseItems(xml, feed, market);
+  return { items, hub: findHub(xml, url) };
+}
+
+/** Pulls <link rel="hub"> and <link rel="self"> out of RSS (atom:link) or Atom. */
+export function findHub(xml: string, fallbackTopic: string) {
+  const head = xml.slice(0, 20000);
+  const links = head.match(/<(?:atom:)?link\b[^>]*>/gi) || [];
+  const attr = (tag: string, name: string) => tag.match(new RegExp(`${name}=["']([^"']+)["']`, "i"))?.[1];
+  const hub = links.find((l) => attr(l, "rel") === "hub");
+  const self = links.find((l) => attr(l, "rel") === "self");
+  const hubUrl = hub && attr(hub, "href");
+  if (!hubUrl) return undefined;
+  return { hub: hubUrl, topic: (self && attr(self, "href")) || fallbackTopic };
+}
+
+/** Parses a full feed or a WebSub push payload into items. */
+export async function parseItems(xml: string, feed: FeedConfig, market: string): Promise<ContentItem[]> {
   const parsed = await parser.parseString(xml);
   const show = feed.show || stripHtml(parsed.title || "") || feed.url;
   const items = parsed.items || [];
@@ -119,6 +154,10 @@ export async function fetchFeed(feed: FeedConfig, market: string): Promise<Conte
         link,
         date: pickDate(item),
         thumbnail: pickThumbnail(item),
+        ...(item.enclosure?.url && (/^audio\//.test(item.enclosure.type || "") || feed.type === "audio")
+          ? { audio: item.enclosure.url as string }
+          : {}),
+        ...(youTubeId(item) ? { videoId: youTubeId(item) } : {}),
       };
     })
     .filter((x): x is ContentItem => x !== null);

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ingestAll } from "@/lib/ingest";
+import { ingestAll, ingestMarket } from "@/lib/ingest";
+import { MARKETS } from "@/config/markets";
+import { readIndex, readSettings } from "@/lib/store";
+import { shouldRunCron } from "@/lib/schedule";
 import type { ContentType } from "@/lib/types";
 
 const TYPES: ContentType[] = ["audio", "video", "article", "fast"];
@@ -12,6 +15,9 @@ export const maxDuration = 300;
  * Manual run: curl -H "Authorization: Bearer $CRON_SECRET" https://<app>/api/ingest
  * One market: /api/ingest?market=phly
  * Fast lane (live feed, no trend refresh): /api/ingest?types=video,article,fast
+ *
+ * Cron calls honor the refresh setting (daily / frequent, toggled in the UI).
+ * Manual calls always run.
  */
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -26,6 +32,18 @@ export async function GET(req: NextRequest) {
   const types = typesParam
     ? (typesParam.split(",").filter((t) => TYPES.includes(t as ContentType)) as ContentType[])
     : undefined;
-  const results = await ingestAll(market, types);
-  return NextResponse.json({ ok: true, results });
+  const fromCron = (req.headers.get("user-agent") || "").includes("vercel-cron");
+  if (!fromCron) return NextResponse.json({ ok: true, results: await ingestAll(market, types) });
+
+  const { refreshMode } = await readSettings();
+  const targets = market ? MARKETS.filter((m) => m.slug === market) : MARKETS;
+  const results = [];
+  for (const m of targets) {
+    if (!shouldRunCron(refreshMode, Boolean(types), await readIndex(m.slug))) {
+      results.push({ market: m.slug, skipped: `refresh mode: ${refreshMode}` });
+      continue;
+    }
+    results.push(await ingestMarket(m, types));
+  }
+  return NextResponse.json({ ok: true, refreshMode, results });
 }

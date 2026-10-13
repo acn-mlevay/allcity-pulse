@@ -1,8 +1,10 @@
 import { MARKETS } from "@/config/markets";
 import type { ContentItem, ContentType, Market, MarketIndex } from "./types";
-import { discoveredFeeds, refreshDiscovery } from "./discover";
+import { feedsFor, refreshDiscovery } from "./discover";
 import { backfillChannel, youtubeApiEnabled } from "./youtube";
-import { fetchFeed } from "./rss";
+import { fetchFeedWithMeta } from "./rss";
+import { mergeLive } from "./live";
+import { RENEW_AFTER_MS, publicBaseUrl, subscribe } from "./websub";
 import { buildTrends } from "./trends";
 import { mapLimit } from "./pool";
 import { readIndex, writeIndex } from "./store";
@@ -27,15 +29,18 @@ export async function ingestMarket(market: Market, types?: ContentType[]) {
   }
   for (const err of discovered?.errors || []) feedErrors.push({ url: market.site || "", error: err });
 
-  // Configured feeds win: skip a discovered feed when the market already lists that type.
-  const configuredTypes = new Set(market.feeds.map((f) => f.type));
-  let feeds = [...market.feeds, ...discoveredFeeds(discovered).filter((f) => !configuredTypes.has(f.type))];
-  if (types) feeds = feeds.filter((f) => types.includes(f.type));
+  // Configured feeds win over discovered ones of the same type.
+  const feeds = feedsFor(market, discovered, types);
 
-  const feedResults = await mapLimit(feeds, 6, (f) => fetchFeed(f, market.slug));
+  const hubs = { ...(previous?.hubs || {}) };
+  const fresh: ContentItem[] = [];
+  const feedResults = await mapLimit(feeds, 6, (f) => fetchFeedWithMeta(f, market.slug));
   feedResults.forEach((r, i) => {
     if (r.status === "fulfilled") {
-      for (const item of r.value) byId.set(item.id, { ...byId.get(item.id), ...item });
+      for (const item of r.value.items) byId.set(item.id, { ...byId.get(item.id), ...item });
+      fresh.push(...r.value.items);
+      const h = r.value.hub;
+      if (h) hubs[feeds[i].url] = { ...hubs[feeds[i].url], ...h };
     } else {
       feedErrors.push({ url: feeds[i].url, error: String(r.reason?.message || r.reason) });
     }
@@ -56,6 +61,19 @@ export async function ingestMarket(market: Market, types?: ContentType[]) {
     }
   }
 
+  // WebSub: (re)subscribe to every hub-enabled feed so new items are pushed to us.
+  if (!types && publicBaseUrl()) {
+    await mapLimit(Object.entries(hubs), 6, async ([feedUrl, h]) => {
+      if (h.subscribedAt && Date.now() - new Date(h.subscribedAt).getTime() < RENEW_AFTER_MS) return;
+      try {
+        await subscribe(h.hub, h.topic, market.slug, feedUrl);
+        hubs[feedUrl] = { ...h, subscribedAt: new Date().toISOString() };
+      } catch (e) {
+        feedErrors.push({ url: feedUrl, error: `websub: ${(e as Error).message}` });
+      }
+    });
+  }
+
   let trends = previous?.trends || [];
   try {
     if (!types && market.trendSource !== "all") trends = await buildTrends(market);
@@ -70,13 +88,17 @@ export async function ingestMarket(market: Market, types?: ContentType[]) {
   const index: MarketIndex = {
     market: market.slug,
     updatedAt: new Date().toISOString(),
+    fullAt: types ? previous?.fullAt : new Date().toISOString(),
     items,
     trends: market.trendSource === "all" ? [] : trends,
     feedErrors,
     discovered,
     youtubeBackfill,
+    hubs,
   };
   await writeIndex(index);
+  // Keep the live feed's store current, including discovery info for its refresh.
+  await mergeLive(fresh, discovered ? { discovered: { [market.slug]: discovered } } : {});
   return { market: market.slug, feeds: feeds.length, items: items.length, trends: index.trends.length, feedErrors };
 }
 

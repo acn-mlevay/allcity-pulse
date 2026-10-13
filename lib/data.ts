@@ -1,7 +1,7 @@
 import { MARKETS } from "@/config/markets";
 import type { Match, MarketIndex, Trend } from "./types";
 import { matchTrend, search, toSearchable, type Searchable } from "./match";
-import { readIndex } from "./store";
+import { readIndex, readLive } from "./store";
 
 let cache: { key: string; indexes: MarketIndex[]; pool: Searchable[] } | null = null;
 
@@ -52,15 +52,20 @@ export async function getView(marketSlug: string, query: string) {
 export const LIVE_WINDOWS = [6, 24, 72, 168] as const;
 const LIVE_LIMIT = 400;
 
-/** Everything published inside the window, newest first. */
-export async function getLive(marketSlug: string, type: string, hours: number) {
-  const { indexes } = await loadAll();
-  const since = Date.now() - hours * 3600 * 1000;
-  const inWindow = indexes
-    .flatMap((i) => i.items)
-    .filter((i) => i.date && new Date(i.date).getTime() >= since && new Date(i.date).getTime() <= Date.now() + 5 * 60000);
+export type LiveData = Awaited<ReturnType<typeof getLive>>;
 
-  const byMarket: Record<string, number> = {};
+/** Everything published inside the window (plus anything live or upcoming), newest first. */
+export async function getLive(marketSlug: string, type: string, hours: number) {
+  const store = await readLive();
+  const now = Date.now();
+  const since = now - hours * 3600 * 1000;
+  const inWindow = store.items.filter((i) => {
+    if (i.live) return true;
+    const t = i.date ? new Date(i.date).getTime() : 0;
+    return t >= since && t <= now + 5 * 60000;
+  });
+
+  const byMarket: Record<string, number> = { all: inWindow.length };
   for (const i of inWindow) byMarket[i.market] = (byMarket[i.market] || 0) + 1;
 
   const scoped = inWindow.filter((i) => marketSlug === "all" || i.market === marketSlug);
@@ -69,8 +74,7 @@ export async function getLive(marketSlug: string, type: string, hours: number) {
 
   const items = scoped
     .filter((i) => type === "all" || i.type === type)
-    .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    .sort((a, b) => (b.live === "live" ? 1 : 0) - (a.live === "live" ? 1 : 0) || (b.date || "").localeCompare(a.date || ""));
 
-  const updated = indexes.map((i) => i.updatedAt).sort().pop() || null;
-  return { items: items.slice(0, LIVE_LIMIT), total: items.length, byMarket: { all: inWindow.length, ...byMarket }, byType, updated };
+  return { items: items.slice(0, LIVE_LIMIT), total: items.length, byMarket, byType, refreshedAt: store.refreshedAt };
 }

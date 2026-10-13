@@ -12,7 +12,10 @@ Finds what's trending in each market's sports news and surfaces ALLCITY O&O audi
    - Content must contain the trend phrase. Title hits rank above description hits. Co-occurring phrases (e.g. "jacksonville jaguars" alongside "jalen hurts") and home-market content add weight.
    - Content older than a year shows its year in red, which marks it as an archive pull.
 3. **Search** box: free-text search across the full library.
-4. **Live feed** (`/live`): everything ALLCITY published in the last 6h / 24h / 3d / 7d across audio, video, articles, and FAST, newest first. Filter by market and type. The page refreshes every minute.
+4. **Live feed** (`/live`): everything ALLCITY published in the last 6h / 24h / 3d / 7d across audio, video, articles, and FAST, newest first. Filter by market and type.
+   - **Plays in place:** YouTube videos open an embedded player in the row; podcast episodes play in a sticky audio bar. Live YouTube streams are badged and pinned to the top (needs `YOUTUBE_API_KEY`). 24/7 live channels (HLS or audio streams) go in `config/streams.ts` and show in an "On air" strip.
+   - **Real time:** the page polls `/api/live` every 15 seconds and new items slide in. While anyone has the page open, YouTube, article, and FAST feeds are re-checked at most once a minute. New YouTube uploads and Simplecast episodes are also **pushed** via WebSub (`/api/websub`): the full ingest subscribes to every feed that advertises a hub and renews every 4 days, so new items land within seconds of publishing.
+   - The live page reads a small store (`pulse/live.json`, last ~8 days) rather than the full indexes.
 
 YouTube channels for DNVR, CHGO, PHLY, PHNX, and DLLS are set in `config/markets.ts`. Each market's article RSS feed (and YouTube channel, for markets without one configured) is found automatically from its homepage (`site` in `config/markets.ts`), re-checked daily. The article feed falls back to WordPress's `/feed/` path. Any discovery failure shows up in the ingest response under `feedErrors`.
 
@@ -49,9 +52,16 @@ Still open: KCSN feeds and teams, a feed for PHNX Wildcats, and FAST channel MRS
    ```
    One market only: `/api/ingest?market=phly`.
 
+**Background refresh** is toggled in the sidebar (Daily / 30 min). It controls the scheduled full ingest (podcast catalogs, trends, WebSub renewals); the live page's real-time updates run regardless and defaults to Daily. Crons keep firing on the schedule below; in Daily mode each market runs one full refresh on the first tick at or after 10:00 UTC (6 AM ET in summer, 5 AM in winter) and every other tick is skipped. Manual `/api/ingest` calls always run. The setting is stored in Blob at `pulse/settings.json`. Vercel's Hobby plan only allows once-a-day crons; on Hobby, replace `vercel.json`'s crons with a single `{ "path": "/api/ingest", "schedule": "0 10 * * *" }` (the 30-min option then has no effect).
+
 `vercel.json` runs one cron per market every 30 minutes, staggered, so no single run has to pull all 78 feeds. A second cron refreshes only video, article, and FAST feeds every 10 minutes for the live feed. If a fast-lane run overlaps a full run on the same market, the last write wins; anything dropped comes back on the next run. Check your Vercel plan's cron count and frequency limits and loosen the schedules if needed. Ingest uses `maxDuration = 300`.
 
 Simplecast feeds use the show homepage as every episode's link, so episodes link to `https://player.simplecast.com/<episode-id>` instead. Click-test a few after the first ingest.
+
+### WebSub checklist
+- Hubs must reach `https://<your-app>/api/websub`. If Deployment Protection is on, enable **Protection Bypass for Automation** in Vercel (it sets `VERCEL_AUTOMATION_BYPASS_SECRET`, which the callback URL includes).
+- Subscriptions are created on the first full ingest after deploy. Failures show in `feedErrors` as `websub: ...`.
+- Pushes are verified against a per-feed HMAC secret; unsigned or mis-signed pushes are ignored.
 
 ## Known v1 limits
 
@@ -75,4 +85,7 @@ Simplecast feeds use the show homepage as every episode's link, so episodes link
 - `lib/store.ts` - Blob / local file storage
 - `app/page.tsx` - trending view
 - `app/live/page.tsx` - live feed
+- `lib/live.ts` - live store, on-view refresh, push handling
+- `lib/websub.ts` - WebSub subscribe/verify
+- `components/LiveView.tsx`, `components/Player.tsx` - live page, players
 - `lib/discover.ts` - finds article feeds and YouTube channels from market homepages
