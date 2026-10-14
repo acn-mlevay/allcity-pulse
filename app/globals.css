@@ -230,3 +230,4 @@ code { font-size: 0.9em; background: var(--surface); padding: 0 4px; border: 1px
 
 .refresh-now { width: 100%; }
 .refresh-now:disabled { opacity: 0.6; cursor: default; }
+.refresh-error { color: #e5484d; }
