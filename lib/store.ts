@@ -1,4 +1,4 @@
-import { head, put } from "@vercel/blob";
+import { get, put } from "@vercel/blob";
 import { promises as fs } from "fs";
 import path from "path";
 import type { LiveStore, MarketIndex } from "./types";
@@ -10,20 +10,25 @@ import type { LiveStore, MarketIndex } from "./types";
 const useBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 const localPath = (name: string) => path.join(process.cwd(), ".data", `${name}.json`);
 
-/** Unchanged blobs are served from memory; head() tells us when they change. */
-const memo = new Map<string, { version: number; data: unknown }>();
+/** Blob store access level; Vercel creates new stores as private by default. */
+export const BLOB_ACCESS: "public" | "private" = process.env.BLOB_ACCESS === "public" ? "public" : "private";
 
-async function readJSON<T>(name: string): Promise<T | null> {
+/** Unchanged blobs are served from memory; the ETag tells us when they change. */
+const memo = new Map<string, { etag: string; data: unknown }>();
+
+export async function readJSON<T>(name: string): Promise<T | null> {
   try {
     if (useBlob()) {
-      const meta = await head(`pulse/${name}.json`);
-      const version = meta.uploadedAt.getTime();
       const hit = memo.get(name);
-      if (hit && hit.version === version) return hit.data as T;
-      const res = await fetch(`${meta.url}?v=${version}`, { cache: "no-store" });
-      if (!res.ok) return null;
-      const data = (await res.json()) as T;
-      memo.set(name, { version, data });
+      const res = await get(`pulse/${name}.json`, {
+        access: BLOB_ACCESS,
+        useCache: false,
+        ...(hit ? { ifNoneMatch: hit.etag } : {}),
+      });
+      if (!res) return null;
+      if (res.statusCode === 304) return (hit?.data as T) ?? null;
+      const data = JSON.parse(await new Response(res.stream).text()) as T;
+      memo.set(name, { etag: res.blob.etag, data });
       return data;
     }
     return JSON.parse(await fs.readFile(localPath(name), "utf8")) as T;
@@ -32,16 +37,17 @@ async function readJSON<T>(name: string): Promise<T | null> {
   }
 }
 
-async function writeJSON(name: string, value: unknown): Promise<void> {
+export async function writeJSON(name: string, value: unknown): Promise<void> {
   const body = JSON.stringify(value);
   if (useBlob()) {
     await put(`pulse/${name}.json`, body, {
-      access: "public",
+      access: BLOB_ACCESS,
       contentType: "application/json",
       addRandomSuffix: false,
       allowOverwrite: true,
       cacheControlMaxAge: 60,
     });
+    memo.delete(name);
     return;
   }
   await fs.mkdir(path.dirname(localPath(name)), { recursive: true });

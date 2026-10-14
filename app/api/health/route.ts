@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { head, put } from "@vercel/blob";
+import { readJSON, writeJSON, BLOB_ACCESS } from "@/lib/store";
 import { publicBaseUrl } from "@/lib/websub";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const checks: Record<string, unknown> = {
     BLOB_READ_WRITE_TOKEN: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    blobAccess: BLOB_ACCESS,
     CRON_SECRET: Boolean(process.env.CRON_SECRET),
     YOUTUBE_API_KEY: Boolean(process.env.YOUTUBE_API_KEY),
     publicUrl: publicBaseUrl(),
@@ -15,17 +16,12 @@ export async function GET() {
   };
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const stamp = new Date().toISOString();
     try {
-      await put("pulse/health.json", JSON.stringify({ at: new Date().toISOString() }), {
-        access: "public",
-        contentType: "application/json",
-        addRandomSuffix: false,
-        allowOverwrite: true,
-      });
-      const meta = await head("pulse/health.json");
-      const res = await fetch(meta.url, { cache: "no-store" });
+      await writeJSON("health", { at: stamp });
       checks.blobWrite = "ok";
-      checks.blobRead = res.ok ? "ok" : `HTTP ${res.status}`;
+      const back = await readJSON<{ at: string }>("health");
+      checks.blobRead = back?.at === stamp ? "ok" : "failed: read back a different value";
     } catch (e) {
       checks.blobWrite = `failed: ${(e as Error).message}`;
     }
@@ -36,11 +32,8 @@ export async function GET() {
     try {
       const headers: Record<string, string> = {};
       if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) headers["x-vercel-protection-bypass"] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
-      const res = await fetch(`${base}/api/ingest?chain=999`, {
-        headers: { ...headers, ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}) },
-        cache: "no-store",
-        signal: AbortSignal.timeout(15000),
-      });
+      if (process.env.CRON_SECRET) headers.Authorization = `Bearer ${process.env.CRON_SECRET}`;
+      const res = await fetch(`${base}/api/ingest?chain=999`, { headers, cache: "no-store", signal: AbortSignal.timeout(15000) });
       checks.selfCall = res.ok ? "ok" : `HTTP ${res.status}`;
     } catch (e) {
       checks.selfCall = `failed: ${(e as Error).message}`;
