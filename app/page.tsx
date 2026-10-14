@@ -19,7 +19,6 @@ export default async function Page({ searchParams }: Props) {
   const scopeName = market?.name || "all markets";
   const maxScore = Math.max(1, ...views.map((v) => v.trend.score));
   const showMarket = !market || market.trendSource === "all";
-  const withContent = views.filter((v) => v.matches.length).length;
 
   return (
     <div className="shell">
@@ -54,11 +53,7 @@ export default async function Page({ searchParams }: Props) {
 
         <header className="trend-header">
           <h1 className="live-title">Trending in {scopeName}</h1>
-          {views.length > 0 && (
-            <p className="trend-sub">
-              {views.length} stories ranked by coverage, {withContent} with ALLCITY content to push. Click a story to see why it ranks and what to share.
-            </p>
-          )}
+
         </header>
 
         {!views.length && (

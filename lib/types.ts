@@ -48,6 +48,8 @@ export interface ContentItem {
   audio?: string;
   /** YouTube video id, for the embedded player. */
   videoId?: string;
+  /** Site section / category (articles), used to group article tiles. */
+  section?: string;
   /** YouTube live state when known. */
   live?: "live" | "upcoming";
   /** Reserved for the transcript phase. Searched when present. */
@@ -90,6 +92,8 @@ export interface MarketIndex {
   trends: Trend[];
   feedErrors: { url: string; error: string }[];
   discovered?: Discovered;
+  /** Show artwork by show name, from each feed's channel image. */
+  showImages?: Record<string, string>;
   /** WebSub hubs advertised by this market's feeds, keyed by feed URL. */
   hubs?: Record<string, { hub: string; topic: string; subscribedAt?: string }>;
   /** YouTube API backfill progress, keyed by feed URL. */

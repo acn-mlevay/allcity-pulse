@@ -93,6 +93,15 @@ function youTubeId(item: AnyItem): string | undefined {
   return String(item.link || "").match(/youtube\.com\/watch\?v=([\w-]{11})/)?.[1];
 }
 
+function pickSection(item: AnyItem): string | undefined {
+  const cats: unknown[] = Array.isArray(item.categories) ? item.categories : [];
+  for (const c of cats) {
+    const name = stripHtml(String(typeof c === "object" && c ? (c as any)._ ?? "" : c)).trim();
+    if (name && !/^uncategori[sz]ed$/i.test(name)) return name;
+  }
+  return undefined;
+}
+
 function pickDate(item: AnyItem): string | null {
   const raw = item.isoDate || item.pubDate || item.published;
   if (!raw) return null;
@@ -102,6 +111,8 @@ function pickDate(item: AnyItem): string | null {
 
 export interface FeedResult {
   items: ContentItem[];
+  /** Channel artwork, when the feed has one. */
+  image?: string;
   /** WebSub hub and topic, when the feed advertises them. */
   hub?: { hub: string; topic: string };
 }
@@ -114,7 +125,16 @@ export async function fetchFeedWithMeta(feed: FeedConfig, market: string): Promi
   const url = feed.url.startsWith("youtube:") ? await youtubeFeedUrl(feed.url.slice(8)) : feed.url;
   const xml = await fetchText(url);
   const items = await parseItems(xml, feed, market);
-  return { items, hub: findHub(xml, url) };
+  return { items, hub: findHub(xml, url), image: channelImage(xml) };
+}
+
+/** Channel-level artwork: itunes:image or <image><url>, before the first item. */
+export function channelImage(xml: string): string | undefined {
+  const head = xml.slice(0, Math.max(xml.search(/<(item|entry)\b/i), 0) || 20000);
+  return (
+    head.match(/<itunes:image[^>]+href=["']([^"']+)["']/i)?.[1] ||
+    head.match(/<image>[\s\S]*?<url>\s*(?:<!\[CDATA\[)?([^<\]]+)/i)?.[1]?.trim()
+  );
 }
 
 /** Pulls <link rel="hub"> and <link rel="self"> out of RSS (atom:link) or Atom. */
@@ -158,6 +178,7 @@ export async function parseItems(xml: string, feed: FeedConfig, market: string):
           ? { audio: item.enclosure.url as string }
           : {}),
         ...(youTubeId(item) ? { videoId: youTubeId(item) } : {}),
+        ...(feed.type === "article" && pickSection(item) ? { section: pickSection(item) } : {}),
       };
     })
     .filter((x): x is ContentItem => x !== null);

@@ -33,12 +33,16 @@ export async function ingestMarket(market: Market, types?: ContentType[]) {
   const feeds = feedsFor(market, discovered, types);
 
   const hubs = { ...(previous?.hubs || {}) };
+  const showImages = { ...(previous?.showImages || {}) };
   const fresh: ContentItem[] = [];
   const feedResults = await mapLimit(feeds, 6, (f) => fetchFeedWithMeta(f, market.slug));
   feedResults.forEach((r, i) => {
     if (r.status === "fulfilled") {
       for (const item of r.value.items) byId.set(item.id, { ...byId.get(item.id), ...item });
       fresh.push(...r.value.items);
+      const img = r.value.image;
+      const showName = feeds[i].show || r.value.items[0]?.show;
+      if (img && showName) showImages[showName] = img;
       const h = r.value.hub;
       if (h) hubs[feeds[i].url] = { ...hubs[feeds[i].url], ...h };
     } else {
@@ -95,6 +99,7 @@ export async function ingestMarket(market: Market, types?: ContentType[]) {
     discovered,
     youtubeBackfill,
     hubs,
+    showImages,
   };
   await writeIndex(index);
   // Keep the live feed's store current, including discovery info for its refresh.

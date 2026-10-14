@@ -98,21 +98,16 @@ export function TrendCard({
       <div className="tcard-body" id={panelId} role="region" aria-label={`${trend.label} details`}>
         <div className="tcard-inner">
           <section className="why">
-            <h3>Why it&apos;s #{rank}</h3>
+            <h3>Coverage</h3>
             <dl className="stats">
               <div><dt>Trend score</dt><dd>{trend.score}</dd></div>
               <div><dt>Headlines</dt><dd>{trend.headlineCount}</dd></div>
               <div><dt>Outlets</dt><dd>{trend.sourceCount}</dd></div>
               {trend.recentCount !== undefined && <div><dt>Last 6 hours</dt><dd>{trend.recentCount}</dd></div>}
             </dl>
-            <p className="why-text">
-              Ranked by how many different outlets are covering it, weighted toward the most recent headlines
-              (coverage loses half its weight every 12 hours).
-            </p>
-
             {trend.outlets && trend.outlets.length > 0 && (
               <>
-                <h4>Where it&apos;s getting coverage</h4>
+                <h4>Top outlets</h4>
                 <ul className="outlets">
                   {trend.outlets.map((o) => (
                     <li key={o.source}>
@@ -124,7 +119,7 @@ export function TrendCard({
               </>
             )}
 
-            <h4>Join the conversation</h4>
+            <h4>Platforms</h4>
             <div className="platforms">
               {platformLinks(trend.label).map((p) => (
                 <a key={p.name} className="chip" href={p.url} target="_blank" rel="noreferrer">{p.name}</a>

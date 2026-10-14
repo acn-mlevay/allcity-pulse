@@ -82,3 +82,56 @@ export async function getLive(marketSlug: string, type: string, hours: number) {
 
   return { items: items.slice(0, LIVE_LIMIT), total: items.length, byMarket, byType, refreshedAt: store.refreshedAt };
 }
+
+export interface LibraryTile {
+  key: string;
+  name: string;
+  market: string;
+  image?: string;
+  count: number;
+  latest: string | null;
+}
+
+/**
+ * Podcast shows (audio) or site sections (articles) as tiles, plus the most
+ * recent items, optionally limited to one tile.
+ */
+export async function getLibrary(marketSlug: string, kind: "audio" | "article", tileKey?: string) {
+  const { indexes } = await loadAll();
+  const scoped = indexes.filter((i) => marketSlug === "all" || i.market === marketSlug);
+  const items = scoped.flatMap((i) => i.items).filter((i) => i.type === kind);
+  const keyOf = (i: (typeof items)[number]) => `${i.market}|${kind === "audio" ? i.show : i.section || "Latest"}`;
+
+  const images: Record<string, string> = Object.assign({}, ...scoped.map((i) => i.showImages || {}));
+  const tiles = new Map<string, LibraryTile>();
+  for (const i of items) {
+    const key = keyOf(i);
+    const t = tiles.get(key);
+    if (!t) {
+      tiles.set(key, {
+        key,
+        name: kind === "audio" ? i.show : i.section || "Latest",
+        market: i.market,
+        image: (kind === "audio" ? images[i.show] : undefined) || i.thumbnail,
+        count: 1,
+        latest: i.date,
+      });
+    } else {
+      t.count++;
+      if ((i.date || "") > (t.latest || "")) {
+        t.latest = i.date;
+        if (!t.image || kind === "article") t.image = (kind === "audio" ? images[i.show] : undefined) || i.thumbnail || t.image;
+      }
+    }
+  }
+  const list = items
+    .filter((i) => !tileKey || keyOf(i) === tileKey)
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+    .slice(0, 60);
+
+  return {
+    tiles: [...tiles.values()].sort((a, b) => (b.latest || "").localeCompare(a.latest || "")),
+    items: list,
+    selected: tileKey && tiles.has(tileKey) ? tileKey : null,
+  };
+}
