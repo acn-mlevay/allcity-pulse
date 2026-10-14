@@ -75,6 +75,10 @@ export interface Trend {
   sourceCount: number;
   latest: string | null;
   headlines: Headline[];
+  /** Headlines in the last 6 hours (momentum). */
+  recentCount?: number;
+  /** Outlets covering it, most headlines first, each with its latest link. */
+  outlets?: { source: string; count: number; link: string }[];
 }
 
 export interface MarketIndex {
@@ -104,6 +108,10 @@ export interface Match {
   item: ContentItem;
   score: number;
   hits: string[];
+  /** 0-100 relevance to the trend or query. */
+  relevance: number;
+  /** Plain-language reasons behind the relevance score. */
+  reasons: string[];
 }
 
 /** Recent items pushed by WebSub or pulled by the live-page refresh. */

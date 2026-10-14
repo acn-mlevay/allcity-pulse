@@ -88,6 +88,17 @@ export function extractTrends(
       .sort((a, b) => b.shared - a.shared)
       .slice(0, 3)
       .map(({ o }) => o.phrase);
+    const bySource = new Map<string, { count: number; link: string }>();
+    for (const h of hs) {
+      const o = bySource.get(h.source);
+      if (o) o.count++;
+      else bySource.set(h.source, { count: 1, link: h.link });
+    }
+    const outlets = [...bySource]
+      .map(([source, o]) => ({ source, ...o }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+    const recentCount = hs.filter((h) => h.date && now - new Date(h.date).getTime() < 6 * 36e5).length;
     const teamCounts = new Map<string, number>();
     hs.forEach((h) => teamCounts.set(h.team, (teamCounts.get(h.team) || 0) + 1));
     const team = [...teamCounts].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
@@ -102,7 +113,9 @@ export function extractTrends(
       headlineCount: c.idx.size,
       sourceCount: c.sources.size,
       latest: hs[0]?.date || null,
-      headlines: hs.slice(0, 4).map(({ title, source, link, date }) => ({ title, source, link, date })),
+      headlines: hs.slice(0, 10).map(({ title, source, link, date }) => ({ title, source, link, date })),
+      recentCount,
+      outlets,
     };
   });
 }

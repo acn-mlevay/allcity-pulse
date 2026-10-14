@@ -4,18 +4,19 @@ import { getLive, LIVE_WINDOWS } from "@/lib/data";
 import { ago } from "@/lib/format";
 import { Sidebar } from "@/components/Sidebar";
 import { LiveView } from "@/components/LiveView";
+import { HeaderRefresh } from "@/components/HeaderRefresh";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Live feed | ALLCITY Pulse" };
 
-const TYPE_KEYS = ["all", "video", "audio", "article", "fast"];
+const TYPE_KEYS = ["video", "audio", "article"];
 
 type Props = { searchParams: Promise<{ market?: string; type?: string; hours?: string }> };
 
 export default async function LivePage({ searchParams }: Props) {
   const sp = await searchParams;
   const market = sp.market && MARKET_BY_SLUG[sp.market] ? sp.market : "all";
-  const type = TYPE_KEYS.includes(sp.type || "") ? sp.type! : "all";
+  const type = TYPE_KEYS.includes(sp.type || "") ? sp.type! : "video";
   const hours = LIVE_WINDOWS.includes(Number(sp.hours) as (typeof LIVE_WINDOWS)[number]) ? Number(sp.hours) : 24;
 
   const initial = await getLive(market, type, hours);
@@ -31,6 +32,9 @@ export default async function LivePage({ searchParams }: Props) {
         note={initial.refreshedAt && <>Feeds checked {ago(initial.refreshedAt)}</>}
       />
       <main className="main">
+        <div className="topbar topbar-end">
+          <HeaderRefresh />
+        </div>
         <LiveView
           initial={initial}
           market={market}

@@ -14,7 +14,7 @@ export const maxDuration = 60;
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
   const hours = LIVE_WINDOWS.includes(Number(p.get("hours")) as (typeof LIVE_WINDOWS)[number]) ? Number(p.get("hours")) : 24;
-  const data = await getLive(p.get("market") || "all", p.get("type") || "all", hours);
+  const data = await getLive(p.get("market") || "all", p.get("type") || "video", hours);
   after(() => maybeRefreshLive().catch(() => {}));
   after(() => maybeStartChain().catch(() => {}));
   return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });

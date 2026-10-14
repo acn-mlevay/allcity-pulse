@@ -33,7 +33,9 @@ export async function getView(marketSlug: string, query: string) {
   else if (market.trendSource === "all") {
     trends = allTrends.slice(0, 24);
     prefer = market.slug;
-  } else trends = indexes.find((i) => i.market === market.slug)?.trends || [];
+  } else trends = [...(indexes.find((i) => i.market === market.slug)?.trends || [])];
+  // Highest trending first; rank follows this order.
+  trends.sort((a, b) => b.score - a.score);
 
   // Creator Network view ranks creator content first; others rank their own market first.
   const views: TrendView[] = trends.map((trend) => ({
@@ -69,11 +71,13 @@ export async function getLive(marketSlug: string, type: string, hours: number) {
   for (const i of inWindow) byMarket[i.market] = (byMarket[i.market] || 0) + 1;
 
   const scoped = inWindow.filter((i) => marketSlug === "all" || i.market === marketSlug);
+  // Tabs: FAST items live under Video.
+  const tab = (t: string) => (t === "fast" ? "video" : t);
   const byType: Record<string, number> = {};
-  for (const i of scoped) byType[i.type] = (byType[i.type] || 0) + 1;
+  for (const i of scoped) byType[tab(i.type)] = (byType[tab(i.type)] || 0) + 1;
 
   const items = scoped
-    .filter((i) => type === "all" || i.type === type)
+    .filter((i) => type === "all" || tab(i.type) === type)
     .sort((a, b) => (b.live === "live" ? 1 : 0) - (a.live === "live" ? 1 : 0) || (b.date || "").localeCompare(a.date || ""));
 
   return { items: items.slice(0, LIVE_LIMIT), total: items.length, byMarket, byType, refreshedAt: store.refreshedAt };

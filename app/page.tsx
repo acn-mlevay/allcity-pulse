@@ -1,10 +1,11 @@
-import { Sidebar } from "@/components/Sidebar";
 import { after } from "next/server";
-import { maybeStartChain } from "@/lib/chain";
 import { getView } from "@/lib/data";
 import { ago } from "@/lib/format";
-import { TrendBlock } from "@/components/TrendBlock";
+import { maybeStartChain } from "@/lib/chain";
+import { Sidebar } from "@/components/Sidebar";
+import { TrendCard } from "@/components/TrendCard";
 import { MatchRow } from "@/components/MatchRow";
+import { HeaderRefresh } from "@/components/HeaderRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +16,10 @@ export default async function Page({ searchParams }: Props) {
   after(() => maybeStartChain().catch(() => {}));
   const { market, views, results, updated, counts, totalItems } = await getView(marketParam, q.trim());
 
-  const withMatches = views.filter((v) => v.matches.length);
-  const without = views.filter((v) => !v.matches.length);
   const scopeName = market?.name || "all markets";
+  const maxScore = Math.max(1, ...views.map((v) => v.trend.score));
+  const showMarket = !market || market.trendSource === "all";
+  const withContent = views.filter((v) => v.matches.length).length;
 
   return (
     <div className="shell">
@@ -29,12 +31,15 @@ export default async function Page({ searchParams }: Props) {
       />
 
       <main className="main">
-        <form className="search" action="/" method="get" role="search">
-          {marketParam !== "all" && <input type="hidden" name="market" value={marketParam} />}
-          <label htmlFor="q" className="sr-only">Search all content</label>
-          <input id="q" name="q" type="search" defaultValue={q} placeholder="Search every show, video, and article" />
-          <button type="submit">Search</button>
-        </form>
+        <div className="topbar">
+          <form className="search" action="/" method="get" role="search">
+            {marketParam !== "all" && <input type="hidden" name="market" value={marketParam} />}
+            <label htmlFor="q" className="sr-only">Search all content</label>
+            <input id="q" name="q" type="search" defaultValue={q} placeholder="Search every show, video, and article" />
+            <button type="submit">Search</button>
+          </form>
+          <HeaderRefresh />
+        </div>
 
         {q && (
           <section className="results" aria-labelledby="results-h">
@@ -42,44 +47,45 @@ export default async function Page({ searchParams }: Props) {
               {results.length ? `${results.length} results for "${q}"` : `Nothing in the library mentions "${q}"`}
             </h1>
             <ul className="matches">
-              {results.map((m) => <MatchRow key={m.item.id} match={m} />)}
+              {results.map((m, i) => <MatchRow key={m.item.id} match={m} index={i} />)}
             </ul>
           </section>
         )}
 
-        <h1 className="section-h">Trending in {scopeName}</h1>
+        <header className="trend-header">
+          <h1 className="live-title">Trending in {scopeName}</h1>
+          {views.length > 0 && (
+            <p className="trend-sub">
+              {views.length} stories ranked by coverage, {withContent} with ALLCITY content to push. Click a story to see why it ranks and what to share.
+            </p>
+          )}
+        </header>
 
         {!views.length && (
           <div className="empty">
             {totalItems === 0 ? (
-              <p>No content indexed yet. Add feeds in <code>config/markets.ts</code>, deploy, then run <code>/api/ingest</code>.</p>
+              <p>No content indexed yet. Click <strong>Refresh now</strong> to load every market.</p>
             ) : market && !market.teams.length && market.trendSource !== "all" ? (
               <p>{market.name} has no teams configured. Add them in <code>config/markets.ts</code> to pull trends.</p>
             ) : (
-              <p>No trends found for {scopeName} in the last 2 days. Run <code>/api/ingest</code> to refresh.</p>
+              <p>No trends found for {scopeName} in the last 2 days. Click <strong>Refresh now</strong> to update.</p>
             )}
           </div>
         )}
 
-        {withMatches.map((v) => (
-          <TrendBlock key={v.trend.id} view={v} showMarket={!market || market.trendSource === "all"} />
-        ))}
-
-        {without.length > 0 && (
-          <details className="unmatched">
-            <summary>{without.length} {without.length === 1 ? "trend" : "trends"} with no matching content</summary>
-            <ul>
-              {without.map(({ trend }) => (
-                <li key={trend.id}>
-                  <strong>{trend.label}</strong>{" "}
-                  {trend.headlines[0] && (
-                    <a href={trend.headlines[0].link} target="_blank" rel="noreferrer">{trend.headlines[0].title}</a>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
+        <div className="tlist">
+          {views.map((v, i) => (
+            <TrendCard
+              key={v.trend.id}
+              rank={i + 1}
+              trend={v.trend}
+              matches={v.matches}
+              heat={Math.round((v.trend.score / maxScore) * 100)}
+              showMarket={showMarket}
+              defaultOpen={i === 0}
+            />
+          ))}
+        </div>
       </main>
     </div>
   );

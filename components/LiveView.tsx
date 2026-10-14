@@ -3,16 +3,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContentItem, StreamConfig } from "@/lib/types";
 import type { LiveData } from "@/lib/data";
-import { CopyLink } from "./CopyLink";
+import { ContentActions } from "./ContentActions";
 import { AudioBar, MediaElement, type NowPlaying } from "./Player";
 
 const TYPE_LABEL = { audio: "Audio", video: "Video", article: "Article", fast: "FAST" } as const;
 const TYPES = [
-  { key: "all", label: "Everything" },
-  { key: "video", label: "Video" },
-  { key: "audio", label: "Audio" },
-  { key: "article", label: "Articles" },
-  { key: "fast", label: "FAST" },
+  { key: "video", label: "Video", hint: "Live TV + YouTube" },
+  { key: "audio", label: "Audio", hint: "Live radio + podcasts" },
+  { key: "article", label: "Articles", hint: "Web stories" },
 ];
 const WINDOWS = [6, 24, 72, 168];
 const POLL_MS = 15_000;
@@ -69,7 +67,7 @@ export function LiveView({ initial, market, type, hours, scope, marketNames, str
     const next = { market, type, hours, ...patch };
     const q = new URLSearchParams();
     if (next.market !== "all") q.set("market", String(next.market));
-    if (next.type !== "all") q.set("type", String(next.type));
+    if (next.type !== "video") q.set("type", String(next.type));
     if (Number(next.hours) !== 24) q.set("hours", String(next.hours));
     const s = q.toString();
     return s ? `/live?${s}` : "/live";
@@ -91,21 +89,27 @@ export function LiveView({ initial, market, type, hours, scope, marketNames, str
   }, [data.items, now]);
 
   const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-  const total = Object.values(data.byType).reduce((a, b) => a + b, 0);
   const windowLabel = hours < 24 ? `${hours} hours` : hours === 24 ? "24 hours" : `${hours / 24} days`;
-  const marketStreams = streams.filter((s) => market === "all" || s.market === market);
+  const tabStreams = streams.filter(
+    (s) => (market === "all" || s.market === market) && ((type === "video" && s.kind === "video") || (type === "audio" && s.kind === "audio"))
+  );
+  const watching = tabStreams.find((s) => s.url === streamOpen) || null;
+  const one = data.total === 1;
+  const typeLabel =
+    type === "video" ? (one ? "video" : "videos") : type === "audio" ? (one ? "audio piece" : "audio pieces") : one ? "article" : "articles";
 
   return (
     <>
       <header className="live-head">
         <h1 className="live-title">
-          {data.total.toLocaleString()} published by {scope} in the last {windowLabel}
+          {data.total.toLocaleString()} {typeLabel} from {scope} in the last {windowLabel}
         </h1>
         <div className="filters">
-          <nav aria-label="Content type" className="chips">
+          <nav aria-label="Content type" className="tabs">
             {TYPES.map((t) => (
-              <Link key={t.key} href={link({ type: t.key })} aria-current={t.key === type ? "true" : undefined} className="chip">
-                {t.label} <span className="count">{t.key === "all" ? total : data.byType[t.key] || 0}</span>
+              <Link key={t.key} href={link({ type: t.key })} aria-current={t.key === type ? "page" : undefined} className="tab">
+                <span className="tab-label">{t.label} <span className="count">{data.byType[t.key] || 0}</span></span>
+                <span className="tab-hint">{t.hint}</span>
               </Link>
             ))}
           </nav>
@@ -122,29 +126,43 @@ export function LiveView({ initial, market, type, hours, scope, marketNames, str
         </p>
       </header>
 
-      {marketStreams.length > 0 && (
-        <section className="onair" aria-label="On air">
-          {marketStreams.map((s) => (
-            <div key={s.url} className="onair-card">
-              <div className="onair-head">
-                <span className="badge-live">Live</span>
-                <strong>{s.name}</strong>
-                <span className="market-tag">{marketNames[s.market] || s.market}</span>
+      {tabStreams.length > 0 && (
+        <section className="onair" aria-label="Live channels">
+          <h2 className="onair-title"><span className="badge-live">Live</span> {type === "video" ? "Live TV channels" : "Live audio"}</h2>
+          {watching && (
+            <div className="stage">
+              <MediaElement key={watching.url} src={watching.url} kind="video" />
+              <div className="stage-meta">
+                <strong>{watching.name}</strong>
+                <button type="button" className="act" onClick={() => setStreamOpen(null)}>Close</button>
+              </div>
+            </div>
+          )}
+          <div className="channels">
+            {tabStreams.map((s) => {
+              const active = s.kind === "video" ? streamOpen === s.url : audio?.src === s.url;
+              return (
                 <button
+                  key={s.url}
                   type="button"
-                  className="play"
+                  className={`channel ${active ? "is-active" : ""}`}
+                  aria-pressed={active}
                   onClick={() =>
                     s.kind === "audio"
-                      ? setAudio({ title: s.name, subtitle: "Live stream", src: s.url })
-                      : setStreamOpen(streamOpen === s.url ? null : s.url)
+                      ? setAudio(active ? null : { title: s.name, subtitle: "Live", src: s.url })
+                      : setStreamOpen(active ? null : s.url)
                   }
                 >
-                  {s.kind === "audio" ? "Listen" : streamOpen === s.url ? "Hide" : "Watch"}
+                  <span className="channel-market">{marketNames[s.market] || s.market}</span>
+                  <span className="channel-name">{s.name}</span>
+                  <span className="channel-cta">
+                    {active ? (s.kind === "audio" ? "Playing" : "Watching") : s.kind === "audio" ? "Listen live" : "Watch live"}
+                    {active && <span className="eq" aria-hidden="true"><i /><i /><i /></span>}
+                  </span>
                 </button>
-              </div>
-              {s.kind === "video" && streamOpen === s.url && <MediaElement src={s.url} kind="video" />}
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </section>
       )}
 
@@ -185,6 +203,7 @@ export function LiveView({ initial, market, type, hours, scope, marketNames, str
                           <span className="market-tag">{marketNames[item.market] || item.market}</span>
                           {recent && <span className="fresh">New</span>}
                         </div>
+                        <ContentActions item={item} />
                       </div>
                       <div className="row-actions">
                         {item.videoId && (
@@ -201,7 +220,6 @@ export function LiveView({ initial, market, type, hours, scope, marketNames, str
                             {audio?.src === item.audio ? "Playing" : "Listen"}
                           </button>
                         )}
-                        <CopyLink url={item.link} />
                       </div>
                       {open && item.videoId && (
                         <div className="embed">
@@ -222,7 +240,7 @@ export function LiveView({ initial, market, type, hours, scope, marketNames, str
         </div>
       ) : (
         <div className="empty">
-          <p>Nothing published in this window yet. Widen the window, or run <code>/api/ingest</code> to load feeds.</p>
+          <p>No {typeLabel} published in this window yet. Widen the window, or click <strong>Refresh now</strong>.</p>
         </div>
       )}
       {data.total > data.items.length && (

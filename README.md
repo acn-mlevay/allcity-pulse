@@ -8,11 +8,15 @@ Finds what's trending in each market's sports news and surfaces ALLCITY O&O audi
    - Pulls every feed in `config/markets.ts` and merges new items into a per-market index. Items stay in the index after they drop out of a feed, so the archive grows over time.
    - Pulls the last 2 days of Google News headlines for each team in the market.
    - Extracts trends: 2-3 word phrases (players, coaches, storylines) repeated across headlines. These are ranked by how many outlets cover them and how recent the coverage is, and duplicate story clusters are merged. Team nicknames and cities are excluded so trends name the story, not the team.
-2. **Match** (on page load)
+2. **Rank and match** (on page load)
+   - Trends are ranked #1 down by trend score (outlet breadth plus recency). Each card collapses; expanding shows why it ranks (score, headlines, outlets, last-6-hour momentum), which outlets are covering it with links, search links on Google News / X / YouTube / Reddit / TikTok, and the matched ALLCITY content.
+   - Each piece of content gets a 0-100 relevance score: name in title 50 (description 30), mentioned 2+ times +5, related storyline phrases +10 each (max 20), same market +10, freshness up to +10. The reasons are shown under each item.
+   - Per item: Share, Copy link, Download MP3 (podcasts), Embed code (YouTube and Simplecast), and Email pitch (pre-written email to an outlet covering the story; add press contacts in `config/outlets.ts`). Per trend: Copy brief and Export CSV.
    - Content must contain the trend phrase. Title hits rank above description hits. Co-occurring phrases (e.g. "jacksonville jaguars" alongside "jalen hurts") and home-market content add weight.
    - Content older than a year shows its year in red, which marks it as an archive pull.
 3. **Search** box: free-text search across the full library.
 4. **Live feed** (`/live`): everything ALLCITY published in the last 6h / 24h / 3d / 7d across audio, video, articles, and FAST, newest first. Filter by market and type.
+   - **Tabs:** Video (live TV channels + YouTube + FAST), Audio (live radio + podcasts), Articles. Live channels in `config/streams.ts` (StreamGuys audio and Zype FAST HLS for DNVR, CHGO, PHLY) sit at the top of their tab and play in the page.
    - **Plays in place:** YouTube videos open an embedded player in the row; podcast episodes play in a sticky audio bar. Live YouTube streams are badged and pinned to the top (needs `YOUTUBE_API_KEY`). 24/7 live channels (HLS or audio streams) go in `config/streams.ts` and show in an "On air" strip.
    - **Real time:** the page polls `/api/live` every 15 seconds and new items slide in. While anyone has the page open, YouTube, article, and FAST feeds are re-checked at most once a minute. New YouTube uploads and Simplecast episodes are also **pushed** via WebSub (`/api/websub`): the full ingest subscribes to every feed that advertises a hub and renews every 4 days, so new items land within seconds of publishing.
    - The live page reads a small store (`pulse/live.json`, last ~8 days) rather than the full indexes.
